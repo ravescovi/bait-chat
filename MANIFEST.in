@@ -13,12 +13,7 @@ recursive-include src/bait_chat *.py
 recursive-include src/bait_mcp *.py
 recursive-include src/demo_instrument *.py *.yml *.yaml *.sh *.md
 recursive-include src/vector_db *
-
-# Include legacy bait_chat (will be removed later)
-recursive-include bait_chat *.py
-
-# Include tests
-recursive-include tests *.py
+recursive-include src/tests *.py
 
 # Include scripts
 recursive-include scripts *.sh

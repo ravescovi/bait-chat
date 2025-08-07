@@ -11,8 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
-# Import from parent package
-from ..backend.server import app
+# Import from the backend package
+from bait_mcp.server import app
 
 # Test client setup
 client = TestClient(app)

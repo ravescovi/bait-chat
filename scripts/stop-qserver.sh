@@ -8,7 +8,7 @@ echo "🛑 Stopping QServer..."
 # Get paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TEST_INSTRUMENT_PATH="$PROJECT_ROOT/bait_chat/test_instrument"
+TEST_INSTRUMENT_PATH="$PROJECT_ROOT/src/demo_instrument"
 QSERVER_PATH="$TEST_INSTRUMENT_PATH/qserver"
 QS_SCRIPT="$QSERVER_PATH/qs_host.sh"
 

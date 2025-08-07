@@ -20,7 +20,7 @@ fi
 # Get the frontend app path
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-APP_PATH="$PROJECT_ROOT/bait_chat/frontend/app.py"
+APP_PATH="$PROJECT_ROOT/src/bait_chat/app.py"
 
 # Start frontend
 exec streamlit run "$APP_PATH" --server.port 8501 "$@"

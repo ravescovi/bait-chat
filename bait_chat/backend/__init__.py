@@ -1,3 +1,0 @@
-"""
-bAIt-Chat Backend Module
-"""

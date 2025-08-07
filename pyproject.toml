@@ -88,6 +88,7 @@ version = {attr = "bait_chat.__version__"}
 [tool.setuptools.packages.find]
 where = ["src", "."]
 include = ["bait_chat*", "bait_mcp*", "demo_instrument*"]
+exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 bait_chat = [
@@ -131,7 +132,7 @@ ensure_newline_before_comments = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --tb=short"
-testpaths = ["tests"]
+testpaths = ["src/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

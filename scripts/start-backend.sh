@@ -13,10 +13,10 @@ if [[ -z "$VIRTUAL_ENV" ]] && [[ -z "$CONDA_DEFAULT_ENV" ]]; then
 fi
 
 # Check if package is installed
-if ! python -c "import bait_chat" 2>/dev/null; then
-    echo "❌ bait-chat package not found. Installing..."
+if ! python -c "import bait_mcp" 2>/dev/null; then
+    echo "❌ bait-mcp package not found. Installing..."
     pip install -e .[qserver]
 fi
 
 # Start backend
-exec python -m bait_chat.backend.server "$@"
+exec python -m bait_mcp.server "$@"
