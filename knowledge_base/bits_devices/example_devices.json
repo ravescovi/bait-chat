@@ -1,0 +1,201 @@
+{
+  "description": "Example BITS device definitions for bAIt-Chat knowledge base",
+  "version": "1.0.0",
+  
+  "motors": {
+    "motor_x": {
+      "device_class": "EpicsMotor",
+      "description": "Sample X position motor for horizontal positioning",
+      "pv_prefix": "XF:28IDC:ES{Dif:1-Ax:X}Mtr",
+      "units": "mm",
+      "limits": [-10.0, 10.0],
+      "precision": 0.001,
+      "velocity": 2.0,
+      "acceleration": 1.0,
+      "use_cases": ["sample positioning", "detector alignment", "beam centering"],
+      "safety_notes": "Soft limits prevent collision with detector"
+    },
+    
+    "motor_y": {
+      "device_class": "EpicsMotor",
+      "description": "Sample Y position motor for vertical positioning",
+      "pv_prefix": "XF:28IDC:ES{Dif:1-Ax:Y}Mtr",
+      "units": "mm",
+      "limits": [-5.0, 5.0],
+      "precision": 0.001,
+      "velocity": 1.5,
+      "acceleration": 1.0,
+      "use_cases": ["sample positioning", "height adjustment"],
+      "safety_notes": "Limited range to prevent sample collision"
+    },
+    
+    "motor_z": {
+      "device_class": "EpicsMotor",
+      "description": "Sample Z position motor for depth positioning",
+      "pv_prefix": "XF:28IDC:ES{Dif:1-Ax:Z}Mtr",
+      "units": "mm",
+      "limits": [-2.0, 8.0],
+      "precision": 0.001,
+      "velocity": 1.0,
+      "acceleration": 0.5,
+      "use_cases": ["focus adjustment", "sample thickness scans"],
+      "safety_notes": "Zero position is at sample surface"
+    },
+    
+    "motor_theta": {
+      "device_class": "EpicsMotor",
+      "description": "Sample rotation motor (theta axis)",
+      "pv_prefix": "XF:28IDC:ES{Dif:1-Ax:Th}Mtr",
+      "units": "degrees",
+      "limits": [-180.0, 180.0],
+      "precision": 0.01,
+      "velocity": 30.0,
+      "acceleration": 10.0,
+      "use_cases": ["rotation scans", "orientation adjustment", "texture measurements"],
+      "safety_notes": "Continuous rotation capable"
+    }
+  },
+  
+  "detectors": {
+    "pilatus": {
+      "device_class": "PilatusDetector",
+      "model": "Pilatus 300K",
+      "description": "2D X-ray area detector for diffraction measurements",
+      "pixel_size_um": 172,
+      "dimensions": "487x619 pixels",
+      "active_area": "83.8x106.5 mm",
+      "max_frame_rate_hz": 500,
+      "typical_frame_rate_hz": 20,
+      "bit_depth": 20,
+      "dynamic_range": 1000000,
+      "exposure_time_range": [0.000001, 300.0],
+      "use_cases": ["powder diffraction", "single crystal", "SAXS/WAXS", "texture analysis"],
+      "file_format": "CBF",
+      "readout_time_ms": 2.3
+    },
+    
+    "i0": {
+      "device_class": "IonChamber",
+      "description": "Incident beam monitor ion chamber",
+      "gas_type": "N2",
+      "pressure_mbar": 1013,
+      "voltage_v": 1500,
+      "length_cm": 10,
+      "typical_count_rate": "1e6 cps",
+      "use_cases": ["beam normalization", "flux monitoring", "transmission measurements"],
+      "stability": "< 0.1% over 8 hours"
+    },
+    
+    "it": {
+      "device_class": "IonChamber",
+      "description": "Transmitted beam monitor ion chamber",
+      "gas_type": "Ar",
+      "pressure_mbar": 1013,
+      "voltage_v": 1800,
+      "length_cm": 15,
+      "use_cases": ["transmission measurements", "absorption edge scans"],
+      "position": "downstream of sample"
+    },
+    
+    "diode": {
+      "device_class": "PhotoDiode",
+      "description": "Fast photodiode for beam monitoring",
+      "response_time_ns": 1,
+      "spectral_range": "200-1100 nm",
+      "active_area_mm2": 100,
+      "use_cases": ["fast beam monitoring", "chopper synchronization", "time-resolved measurements"],
+      "max_count_rate": "1e9 Hz"
+    },
+    
+    "scintillator": {
+      "device_class": "ScintillatorDetector",
+      "description": "YAG scintillator with CCD camera",
+      "scintillator_type": "YAG:Ce",
+      "thickness_um": 50,
+      "camera_resolution": "1024x1024",
+      "pixel_size_um": 6.5,
+      "use_cases": ["beam imaging", "sample alignment", "beam profile"],
+      "field_of_view": "6.7x6.7 mm"
+    }
+  },
+  
+  "sample_environment": {
+    "sample_stage": {
+      "device_class": "SampleStage",
+      "description": "Multi-axis sample positioning stage",
+      "axes": ["x", "y", "z", "theta"],
+      "load_capacity_g": 500,
+      "temperature_range_k": [77, 773],
+      "atmosphere": "air or inert gas",
+      "use_cases": ["sample positioning", "temperature-dependent measurements"]
+    },
+    
+    "lakeshore": {
+      "device_class": "LakeShore336",
+      "description": "Temperature controller for cryogenic measurements",
+      "channels": 4,
+      "temperature_range_k": [1.4, 800],
+      "stability_mk": 1,
+      "sensor_types": ["Si diode", "Pt RTD", "thermocouple"],
+      "use_cases": ["low temperature diffraction", "phase transitions"],
+      "heater_power_w": 50
+    },
+    
+    "cryostream": {
+      "device_class": "CryoStream",
+      "description": "Nitrogen gas cryostream for sample cooling",
+      "temperature_range_k": [90, 300],
+      "stability_k": 0.1,
+      "flow_rate_l_min": 5,
+      "use_cases": ["protein crystallography", "chemical crystallography", "phase transitions"],
+      "startup_time_min": 15
+    }
+  },
+  
+  "beamline_optics": {
+    "monochromator": {
+      "device_class": "DoubleCrystalMonochromator",
+      "description": "Si(111) double crystal monochromator",
+      "crystal_type": "Si(111)",
+      "energy_range_kev": [6, 25],
+      "resolution_de_e": 0.0001,
+      "use_cases": ["energy selection", "harmonic rejection"],
+      "typical_energies": [8.0, 10.0, 12.4, 17.0]
+    },
+    
+    "mirrors": {
+      "device_class": "FocusingMirror",
+      "description": "Kirkpatrick-Baez focusing mirrors",
+      "coating": "Pt",
+      "focal_length_m": 1.2,
+      "acceptance_angle_mrad": 2.0,
+      "use_cases": ["beam focusing", "harmonic rejection", "beam steering"]
+    }
+  },
+  
+  "common_parameters": {
+    "typical_energies_kev": [8.0, 8.979, 10.0, 12.4, 17.0, 20.0],
+    "flux_photons_per_sec": 1e12,
+    "beam_size_um": "100x50",
+    "hutch_temperature_c": 22,
+    "typical_exposure_times_s": [0.1, 1.0, 10.0, 60.0, 300.0]
+  },
+  
+  "safety_systems": {
+    "fast_shutter": {
+      "device_class": "FastShutter",
+      "description": "Pneumatic fast shutter for beam control",
+      "open_time_ms": 3,
+      "close_time_ms": 2,
+      "use_cases": ["exposure control", "safety interlock", "time-resolved measurements"]
+    },
+    
+    "beam_stop": {
+      "device_class": "BeamStop",
+      "description": "Motorized beam stop for direct beam attenuation",
+      "material": "Tungsten",
+      "thickness_mm": 5,
+      "positioning_precision_um": 10
+    }
+  }
+}

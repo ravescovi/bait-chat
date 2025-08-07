@@ -1,0 +1,122 @@
+# Docker Compose override for local LLM setups
+version: '3.8'
+
+services:
+  # Ollama service for local LLM inference
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bait-chat-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./models:/models:ro  # Mount local models directory if available
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    networks:
+      - bait-chat-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Adjust based on your system
+        reservations:
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Backend configured for local LLM
+  backend:
+    environment:
+      # Override LLM configuration
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - LOCAL_MODEL_NAME=llama2
+      - LOCAL_MODEL_TEMPERATURE=0.7
+      - LOCAL_MODEL_MAX_TOKENS=4000
+      - LOCAL_MODEL_TIMEOUT=120
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - bait-chat-network
+
+  # Model management utility service
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: bait-chat-ollama-init
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - bait-chat-network
+    profiles:
+      - init
+    command: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...' &&
+        sleep 10 &&
+        echo 'Pulling llama2 model...' &&
+        ollama --host http://ollama:11434 pull llama2 &&
+        echo 'Pulling codellama model...' &&
+        ollama --host http://ollama:11434 pull codellama:7b &&
+        echo 'Models ready!'
+      "
+    restart: "no"
+
+  # Optional: GPU-enabled Ollama (for systems with NVIDIA GPUs)
+  ollama-gpu:
+    image: ollama/ollama:latest
+    container_name: bait-chat-ollama-gpu
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./models:/models:ro
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - bait-chat-network
+    restart: unless-stopped
+    profiles:
+      - gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+# Additional volumes for local LLM
+volumes:
+  ollama_data:
+    driver: local
+
+# Usage Instructions:
+#
+# 1. Start with Ollama:
+#    docker-compose -f docker-compose.yml -f docker-compose.local-llm.yml up -d
+#
+# 2. Initialize models:
+#    docker-compose -f docker-compose.yml -f docker-compose.local-llm.yml --profile init up ollama-init
+#
+# 3. For GPU support:
+#    docker-compose -f docker-compose.yml -f docker-compose.local-llm.yml --profile gpu up -d
+#
+# 4. Check Ollama status:
+#    curl http://localhost:11434/api/version
+#
+# 5. List models:
+#    curl http://localhost:11434/api/tags
