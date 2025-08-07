@@ -41,7 +41,7 @@ qserver = [
     "bluesky-queueserver>=0.0.20",
     "bluesky>=1.10.0",
     "ophyd>=1.7.0", 
-    "databroker>=2.0.0",
+    "databroker>=1.2.5",
     "apsbits>=0.4.0",
     "apstools>=1.6.0",
 ]
