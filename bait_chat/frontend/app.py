@@ -21,8 +21,6 @@ if "devices" not in st.session_state:
 if "plans" not in st.session_state:
     st.session_state.plans = {}
 
-st.title("🔬 bAIt-Chat - Bluesky AI Technician")
-st.markdown("*AI-powered assistant for Bluesky beamline control*")
 
 # Sidebar for configuration
 st.sidebar.header("🔌 Connection Configuration")
