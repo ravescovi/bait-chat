@@ -19,6 +19,11 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .models import DeviceResponse, ExplainRequest, ExplainResponse, PlanResponse, QServerStatus
 
+class ChatRequest:
+    def __init__(self, message: str, model_url: str = None):
+        self.message = message
+        self.model_url = model_url
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -341,6 +346,85 @@ Help users understand scan plans, suggest appropriate parameters based on availa
         )
 
 
+@app.post("/chat")
+async def chat_with_llm(request: dict):
+    """Direct chat with LLM using provided model URL"""
+    try:
+        message = request.get("message", "")
+        model_url = request.get("model_url", LMSTUDIO_URL)
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+
+        # Get current devices and plans for context
+        try:
+            devices_response = await get_devices()
+            plans_response = await get_plans()
+
+            devices = devices_response.devices
+            plans = plans_response.plans
+
+            # Build context
+            device_list = []
+            for category, devs in devices.items():
+                for name, info in devs.items():
+                    device_list.append(f"{name} ({info['description']})")
+
+            plan_list = list(plans.keys())
+
+            context = f"""Available devices: {', '.join(device_list[:10]) if device_list else 'Loading...'}
+Available plans: {', '.join(plan_list[:10]) if plan_list else 'Loading...'}"""
+
+        except:
+            context = "Real-time device and plan information not available"
+
+        # Connect to LLM
+        async with aiohttp.ClientSession() as session:
+            # Create context-aware system message
+            system_context = f"""You are bAIt-Chat, an AI assistant for Bluesky beamline control at synchrotron facilities.
+
+{context}
+
+You are connected to a real QServer running a test instrument with BITS (Beamline Integration and Testing Suite).
+
+Help users understand scan plans, suggest appropriate parameters based on available devices, explain beamline operations, and provide guidance on data collection strategies. Be specific about the actual devices available when possible."""
+
+            messages = [
+                {"role": "system", "content": system_context},
+                {"role": "user", "content": message},
+            ]
+
+            payload = {
+                "model": "gpt-3.5-turbo",
+                "messages": messages,
+                "max_tokens": 500,
+                "temperature": 0.7,
+            }
+
+            async with session.post(
+                f"{model_url}/v1/chat/completions",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    chat_response = result["choices"][0]["message"]["content"]
+                    return {
+                        "message": message,
+                        "response": chat_response,
+                        "model_url": model_url
+                    }
+                else:
+                    error_text = await response.text()
+                    raise HTTPException(status_code=500, detail=f"LLM API error: {response.status} - {error_text}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
+
+
 # Enhanced Instrument Introspection Endpoints
 
 
@@ -442,7 +526,6 @@ async def get_plans_detailed():
                 "example_usage": _get_smart_plan_example(plan_name, parameters, available_devices),
                 "docstring": plan_info.get("docstring", ""),
                 "is_generator": plan_info.get("is_generator", True),
-                "complexity": _assess_plan_complexity(plan_name, parameters),
                 "estimated_duration": _estimate_plan_duration(plan_name, parameters),
                 "prerequisites": _get_plan_prerequisites(plan_name, parameters),
                 "common_use_cases": _get_plan_use_cases(plan_name),
@@ -785,16 +868,6 @@ def _get_parameter_validation_rules(param_name: str) -> dict:
     return rules
 
 
-def _assess_plan_complexity(plan_name: str, parameters: list) -> str:
-    """Assess plan complexity"""
-    param_count = len(parameters)
-
-    if "grid" in plan_name.lower() or param_count > 6:
-        return "high"
-    elif "scan" in plan_name.lower() or param_count > 3:
-        return "medium"
-    else:
-        return "low"
 
 
 def _estimate_plan_duration(plan_name: str, parameters: list) -> str:
@@ -893,25 +966,15 @@ def _analyze_plan_suite(detailed_plans: list) -> dict:
     """Analyze the complete suite of plans"""
     total_plans = len(detailed_plans)
     categories = {}
-    complexities = {"low": 0, "medium": 0, "high": 0}
 
     for plan in detailed_plans:
         category = plan.get("category", "other")
         categories[category] = categories.get(category, 0) + 1
 
-        complexity = plan.get("complexity", "low")
-        complexities[complexity] += 1
-
     return {
         "total_plans": total_plans,
         "categories_breakdown": categories,
-        "complexity_breakdown": complexities,
-        "most_complex_plans": [p["name"] for p in detailed_plans if p.get("complexity") == "high"][
-            :5
-        ],
-        "recommended_starter_plans": [
-            p["name"] for p in detailed_plans if p.get("complexity") == "low"
-        ][:5],
+        "available_plan_names": [p["name"] for p in detailed_plans][:10],
     }
 
 

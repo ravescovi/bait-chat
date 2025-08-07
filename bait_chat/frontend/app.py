@@ -24,12 +24,15 @@ if "plans" not in st.session_state:
 st.title("🔬 bAIt-Chat - Bluesky AI Technician")
 st.markdown("*AI-powered assistant for Bluesky beamline control*")
 
-# Sidebar for QServer configuration
-st.sidebar.header("🔌 QServer Connection")
+# Sidebar for configuration
+st.sidebar.header("🔌 Connection Configuration")
+model_address = st.sidebar.text_input(
+    "Model Address", "http://localhost:1234", help="Enter the LLM model URL (LMStudio, Ollama, etc.)"
+)
+backend_url = st.sidebar.text_input("Backend URL", "http://localhost:8000")
 qserver_url = st.sidebar.text_input(
     "QServer Address", "http://localhost:60610", help="Enter the QServer URL"
 )
-backend_url = st.sidebar.text_input("Backend URL", "http://localhost:8000")
 
 # QServer status section
 st.sidebar.markdown("### 🖥️ QServer Status")
@@ -115,95 +118,102 @@ if st.session_state.devices or st.session_state.plans:
     st.sidebar.metric("Devices", device_count)
     st.sidebar.metric("Plans", plan_count)
 
-# Main content - Chat interface
-st.header("💬 AI Assistant Chat")
+# Main content - Tabbed interface
+main_tab1, main_tab2 = st.tabs(["💬 Chat", "🔬 Instrument Info"])
 
-# Display chat history
-for message in st.session_state.chat_history:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+with main_tab1:
+    st.header("💬 AI Assistant Chat")
+    
+    # Display chat history
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
 
-# Chat input
-if prompt := st.chat_input("Ask about beamline operations, scan plans, or devices..."):
-    # Add user message to chat
-    st.session_state.chat_history.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
+    # Chat input
+    if prompt := st.chat_input("Ask about beamline operations, scan plans, or devices..."):
+        # Add user message to chat
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
 
-    # Get AI response
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            try:
-                # Send question to backend for AI processing
-                response = requests.post(
-                    f"{backend_url}/explain", json={"plan_name": prompt}, timeout=30
-                )
-
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_response = result.get("explanation", "I couldn't generate a response.")
-                    st.write(ai_response)
-                    st.session_state.chat_history.append(
-                        {"role": "assistant", "content": ai_response}
+        # Get AI response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    # Use the new backend chat endpoint
+                    response = requests.post(
+                        f"{backend_url}/chat",
+                        json={"message": prompt, "model_url": model_address},
+                        timeout=30
                     )
-                else:
-                    error_msg = "I'm having trouble connecting to the AI system. Please check the backend connection."
+
+                    if response.status_code == 200:
+                        result = response.json()
+                        ai_response = result.get("response", "I couldn't generate a response.")
+                        st.write(ai_response)
+                        st.session_state.chat_history.append(
+                            {"role": "assistant", "content": ai_response}
+                        )
+                    else:
+                        error_msg = f"Chat API error: {response.status_code}"
+                        if response.status_code == 500:
+                            error_detail = response.json().get("detail", "Unknown server error")
+                            error_msg += f" - {error_detail}"
+                        st.error(error_msg)
+                        st.session_state.chat_history.append(
+                            {"role": "assistant", "content": error_msg}
+                        )
+                except Exception as e:
+                    error_msg = f"Connection error: {str(e)}"
                     st.error(error_msg)
-                    st.session_state.chat_history.append(
-                        {"role": "assistant", "content": error_msg}
-                    )
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+
+    # Clear chat button
+    if st.button("🗑️ Clear Chat"):
+        st.session_state.chat_history = []
+        st.rerun()
+
+with main_tab2:
+    st.header("🔬 Instrument Information")
+    
+    # Create tabs for different aspects of introspection
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Status", "🔧 Devices", "📋 Plans", "📈 History"])
+
+    with tab1:
+        st.subheader("Instrument Status")
+        if st.button("🔄 Refresh Status"):
+            try:
+                response = requests.get(f"{backend_url}/instrument/status", timeout=10)
+                if response.status_code == 200:
+                    status_data = response.json()
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric(
+                            "QServer State",
+                            status_data["qserver_status"].get("manager_state", "Unknown"),
+                        )
+                        st.metric(
+                            "Environment", "Open" if status_data.get("environment_info") else "Closed"
+                        )
+
+                    with col2:
+                        st.metric("Instrument", status_data.get("instrument_name", "Unknown"))
+
+                    # Show detailed QServer status
+                    if "qserver_status" in status_data:
+                        st.json(status_data["qserver_status"])
+                else:
+                    st.error("Could not fetch instrument status")
             except Exception as e:
-                error_msg = f"Connection error: {str(e)}"
-                st.error(error_msg)
-                st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+                st.error(f"Error fetching status: {str(e)}")
 
-# Clear chat button
-if st.button("🗑️ Clear Chat"):
-    st.session_state.chat_history = []
-    st.rerun()
-
-# Instrument Introspection Section
-st.markdown("---")
-st.header("🔬 Instrument Introspection")
-
-# Create tabs for different aspects of introspection
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Status", "🔧 Devices", "📋 Plans", "📈 History"])
-
-with tab1:
-    st.subheader("Instrument Status")
-    if st.button("🔄 Refresh Status"):
-        try:
-            response = requests.get(f"{backend_url}/instrument/status", timeout=10)
-            if response.status_code == 200:
-                status_data = response.json()
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric(
-                        "QServer State",
-                        status_data["qserver_status"].get("manager_state", "Unknown"),
-                    )
-                    st.metric(
-                        "Environment", "Open" if status_data.get("environment_info") else "Closed"
-                    )
-
-                with col2:
-                    st.metric("Instrument", status_data.get("instrument_name", "Unknown"))
-
-                # Show detailed QServer status
-                if "qserver_status" in status_data:
-                    st.json(status_data["qserver_status"])
-            else:
-                st.error("Could not fetch instrument status")
-        except Exception as e:
-            st.error(f"Error fetching status: {str(e)}")
-
-with tab2:
-    st.subheader("Detailed Device Information")
-    if st.button("🔄 Refresh Devices"):
-        try:
-            response = requests.get(f"{backend_url}/instrument/devices/detailed", timeout=10)
-            if response.status_code == 200:
+    with tab2:
+        st.subheader("Detailed Device Information")
+        if st.button("🔄 Refresh Devices"):
+            try:
+                response = requests.get(f"{backend_url}/instrument/devices/detailed", timeout=10)
+                if response.status_code == 200:
                 devices_data = response.json()
 
                 if "error" in devices_data:
@@ -258,8 +268,8 @@ with tab2:
         except Exception as e:
             st.error(f"Error fetching devices: {str(e)}")
 
-with tab3:
-    st.subheader("Detailed Plan Information")
+    with tab3:
+        st.subheader("Detailed Plan Information")
 
     # Add sub-tabs for better organization
     plan_tab1, plan_tab2, plan_tab3 = st.tabs(["📋 All Plans", "🎯 Recommendations", "📊 Analysis"])
@@ -493,8 +503,8 @@ with tab3:
             except Exception as e:
                 st.error(f"Error fetching analysis: {str(e)}")
 
-with tab4:
-    st.subheader("Scan History")
+    with tab4:
+        st.subheader("Scan History")
     if st.button("🔄 Refresh History"):
         try:
             response = requests.get(f"{backend_url}/instrument/history", timeout=10)
