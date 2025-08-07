@@ -214,28 +214,28 @@ with main_tab2:
             try:
                 response = requests.get(f"{backend_url}/instrument/devices/detailed", timeout=10)
                 if response.status_code == 200:
-                devices_data = response.json()
+                    devices_data = response.json()
 
-                if "error" in devices_data:
-                    st.error(devices_data["error"])
-                else:
-                    devices = devices_data.get("devices", [])
-                    categories = devices_data.get("categories", {})
+                    if "error" in devices_data:
+                        st.error(devices_data["error"])
+                    else:
+                        devices = devices_data.get("devices", [])
+                        categories = devices_data.get("categories", {})
 
-                    # Show device summary
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total Devices", devices_data.get("total_count", 0))
-                    with col2:
-                        st.metric("Motors", categories.get("motors", 0))
-                    with col3:
-                        st.metric("Detectors", categories.get("detectors", 0))
+                        # Show device summary
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Devices", devices_data.get("total_count", 0))
+                        with col2:
+                            st.metric("Motors", categories.get("motors", 0))
+                        with col3:
+                            st.metric("Detectors", categories.get("detectors", 0))
 
-                    # Device details table
-                    if devices:
-                        device_df_data = []
-                        for device in devices:
-                            device_df_data.append(
+                        # Device details table
+                        if devices:
+                            device_df_data = []
+                            for device in devices:
+                                device_df_data.append(
                                 {
                                     "Name": device["name"],
                                     "Category": device["category"],
@@ -245,28 +245,28 @@ with main_tab2:
                                 }
                             )
 
-                        st.dataframe(device_df_data, use_container_width=True)
+                            st.dataframe(device_df_data, use_container_width=True)
 
-                        # Expandable device details
-                        for device in devices:
-                            with st.expander(f"🔧 {device['name']} Details"):
-                                st.write(f"**Class:** {device['class']}")
-                                st.write(f"**Module:** {device['module']}")
-                                st.write(f"**Category:** {device['category']}")
-                                st.write(f"**Description:** {device['description']}")
+                            # Expandable device details
+                            for device in devices:
+                                with st.expander(f"🔧 {device['name']} Details"):
+                                    st.write(f"**Class:** {device['class']}")
+                                    st.write(f"**Module:** {device['module']}")
+                                    st.write(f"**Category:** {device['category']}")
+                                    st.write(f"**Description:** {device['description']}")
 
-                                if device.get("read_attrs"):
-                                    st.write(
-                                        f"**Read Attributes:** {', '.join(device['read_attrs'])}"
-                                    )
-                                if device.get("configuration_attrs"):
-                                    st.write(
-                                        f"**Config Attributes:** {', '.join(device['configuration_attrs'])}"
-                                    )
-            else:
-                st.error("Could not fetch device details")
-        except Exception as e:
-            st.error(f"Error fetching devices: {str(e)}")
+                                    if device.get("read_attrs"):
+                                        st.write(
+                                            f"**Read Attributes:** {', '.join(device['read_attrs'])}"
+                                        )
+                                    if device.get("configuration_attrs"):
+                                        st.write(
+                                            f"**Config Attributes:** {', '.join(device['configuration_attrs'])}"
+                                        )
+                else:
+                    st.error("Could not fetch device details")
+            except Exception as e:
+                st.error(f"Error fetching devices: {str(e)}")
 
     with tab3:
         st.subheader("Detailed Plan Information")
