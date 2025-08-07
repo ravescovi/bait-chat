@@ -379,7 +379,8 @@ Available plans: {', '.join(plan_list[:10]) if plan_list else 'Loading...'}"""
             context = "Real-time device and plan information not available"
 
         # Connect to LLM
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector) as session:
             # Create context-aware system message
             system_context = f"""You are bAIt-Chat, an AI assistant for Bluesky beamline control at synchrotron facilities.
 
