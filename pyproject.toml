@@ -73,8 +73,8 @@ all = [
 [project.scripts]
 bait-chat = "bait_chat.cli:main"
 bait-chat-demo = "bait_chat.demo:main"
-bait-chat-backend = "bait_chat.backend.server:main"  
-bait-chat-frontend = "bait_chat.frontend.app:main"
+bait-chat-backend = "bait_mcp.server:main"  
+bait-chat-frontend = "bait_chat.app:main"
 
 [project.urls]
 Homepage = "https://github.com/example/bait-chat"
@@ -86,14 +86,18 @@ Changelog = "https://github.com/example/bait-chat/blob/main/CHANGELOG.md"
 version = {attr = "bait_chat.__version__"}
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["bait_chat*"]
+where = ["src", "."]
+include = ["bait_chat*", "bait_mcp*", "demo_instrument*"]
 
 [tool.setuptools.package-data]
 bait_chat = [
-    "test_instrument/**/*",
-    "frontend/static/**/*", 
-    "backend/templates/**/*",
+    "static/**/*", 
+    "templates/**/*",
+]
+demo_instrument = [
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.sh",
 ]
 
 [tool.black]
@@ -127,7 +131,7 @@ ensure_newline_before_comments = true
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --tb=short"
-testpaths = ["bait_chat/tests"]
+testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

@@ -1254,7 +1254,7 @@ def main():
     print(f"🤖 LMStudio URL: {LMSTUDIO_URL}")
 
     uvicorn.run(
-        "bait_chat.backend.server:app",
+        "bait_mcp.server:app",
         host=settings.host,
         port=settings.port,
         reload=settings.debug,

@@ -8,26 +8,17 @@ include LICENSE
 include pyproject.toml
 include compose.yml
 
-# Include test instrument files
-recursive-include bait_chat/test_instrument *.py
-recursive-include bait_chat/test_instrument *.yml
-recursive-include bait_chat/test_instrument *.yaml
-recursive-include bait_chat/test_instrument *.sh
-recursive-include bait_chat/test_instrument *.md
+# Include src packages
+recursive-include src/bait_chat *.py
+recursive-include src/bait_mcp *.py
+recursive-include src/demo_instrument *.py *.yml *.yaml *.sh *.md
+recursive-include src/vector_db *
 
-# Include frontend assets
-recursive-include bait_chat/frontend *.py
-recursive-include bait_chat/frontend/static *
-
-# Include backend templates
-recursive-include bait_chat/backend *.py
-recursive-include bait_chat/backend/templates *
+# Include legacy bait_chat (will be removed later)
+recursive-include bait_chat *.py
 
 # Include tests
-recursive-include bait_chat/tests *.py
-
-# Include vector_db
-recursive-include bait_chat/vector_db *
+recursive-include tests *.py
 
 # Include scripts
 recursive-include scripts *.sh
