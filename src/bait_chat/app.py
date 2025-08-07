@@ -20,35 +20,104 @@ if "devices" not in st.session_state:
     st.session_state.devices = {}
 if "plans" not in st.session_state:
     st.session_state.plans = {}
-if "model_address" not in st.session_state:
-    st.session_state.model_address = "http://localhost:1234"
-if "st.session_state.backend_url" not in st.session_state:
-    st.session_state.st.session_state.backend_url = "http://localhost:8000"
-if "qserver_url" not in st.session_state:
-    st.session_state.qserver_url = "http://localhost:60610"
-
-# Add custom CSS for sticky header
-st.markdown("""
-<style>
-    /* Make the header sticky */
-    .stTabs {
-        position: sticky;
-        top: 0;
-        background-color: white;
-        z-index: 999;
-        padding-top: 10px;
-    }
-    /* Remove default padding */
-    .block-container {
-        padding-top: 2rem;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 
+# Sidebar for configuration
+st.sidebar.header("🔌 Connection Configuration")
+model_address = st.sidebar.text_input(
+    "Model Address", "http://localhost:1234", help="Enter the LLM model URL (LMStudio, Ollama, etc.)"
+)
+backend_url = st.sidebar.text_input("Backend URL", "http://localhost:8000")
+qserver_url = st.sidebar.text_input(
+    "QServer Address", "http://localhost:60610", help="Enter the QServer URL"
+)
 
-# Main content - Tabbed interface with sticky header
-main_tab1, main_tab2, main_tab3 = st.tabs(["💬 Chat", "🔬 Instrument Info", "⚙️ Configuration"])
+# QServer status section
+st.sidebar.markdown("### 🖥️ QServer Status")
+try:
+    qserver_status_response = requests.get(f"{backend_url}/qserver/status", timeout=5)
+    if qserver_status_response.status_code == 200:
+        status_data = qserver_status_response.json()
+        st.sidebar.success(f"✅ QServer: {status_data['manager_state']}")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            st.sidebar.metric("Devices", status_data.get("devices_in_queue", 0))
+        with col2:
+            st.sidebar.metric("Plans", status_data.get("plans_in_queue", 0))
+    else:
+        st.sidebar.error("❌ QServer not available")
+except Exception as e:
+    st.sidebar.warning(f"⚠️ QServer status unknown")
+
+# Connection status and data fetching
+if st.sidebar.button("Connect to QServer") or st.sidebar.button("🔄 Refresh Data"):
+    with st.sidebar:
+        with st.spinner("Connecting..."):
+            # Test backend connection
+            try:
+                health_response = requests.get(f"{backend_url}/health", timeout=5)
+                if health_response.status_code == 200:
+                    st.success("✅ Backend connected")
+                else:
+                    st.error("❌ Backend not responding")
+            except Exception as e:
+                st.error(f"❌ Backend failed: {str(e)}")
+
+            # Fetch devices from QServer via backend
+            try:
+                devices_response = requests.get(f"{backend_url}/devices", timeout=10)
+                if devices_response.status_code == 200:
+                    st.session_state.devices = devices_response.json().get("devices", {})
+                    device_count = sum(
+                        len(category) for category in st.session_state.devices.values()
+                    )
+                    st.success(f"✅ Loaded {device_count} devices")
+                else:
+                    st.warning("⚠️ Could not load devices")
+                    st.session_state.devices = {}
+            except Exception as e:
+                st.warning(f"⚠️ Devices failed: {str(e)}")
+                st.session_state.devices = {}
+
+            # Fetch plans from QServer via backend
+            try:
+                plans_response = requests.get(f"{backend_url}/plans", timeout=10)
+                if plans_response.status_code == 200:
+                    plans_data = plans_response.json()
+                    st.session_state.plans = plans_data.get("plans", {})
+                    st.success(f"✅ Loaded {len(st.session_state.plans)} plans")
+                else:
+                    st.warning("⚠️ Could not load plans")
+                    # Fallback to common plans
+                    st.session_state.plans = {
+                        "scan": {"description": "Continuous scan of a motor"},
+                        "count": {"description": "Take measurements at current position"},
+                        "list_scan": {"description": "Scan through a list of positions"},
+                        "grid_scan": {"description": "2D grid scan with two motors"},
+                        "rel_scan": {"description": "Relative scan from current position"},
+                    }
+            except Exception as e:
+                st.warning(f"⚠️ Plans failed: {str(e)}")
+                st.session_state.plans = {
+                    "scan": {"description": "Continuous scan of a motor"},
+                    "count": {"description": "Take measurements at current position"},
+                    "list_scan": {"description": "Scan through a list of positions"},
+                }
+
+# Sidebar status
+if st.session_state.devices or st.session_state.plans:
+    st.sidebar.markdown("### 📊 Status")
+    device_count = (
+        sum(len(category) for category in st.session_state.devices.values())
+        if st.session_state.devices
+        else 0
+    )
+    plan_count = len(st.session_state.plans)
+    st.sidebar.metric("Devices", device_count)
+    st.sidebar.metric("Plans", plan_count)
+
+# Main content - Tabbed interface
+main_tab1, main_tab2 = st.tabs(["💬 Chat", "🔬 Instrument Info"])
 
 with main_tab1:
     st.header("💬 AI Assistant Chat")
@@ -71,8 +140,8 @@ with main_tab1:
                 try:
                     # Use the new backend chat endpoint
                     response = requests.post(
-                        f"{st.session_state.st.session_state.backend_url}/chat",
-                        json={"message": prompt, "model_url": st.session_state.model_address},
+                        f"{backend_url}/chat",
+                        json={"message": prompt, "model_url": model_address},
                         timeout=30
                     )
 
@@ -112,7 +181,7 @@ with main_tab2:
         st.subheader("Instrument Status")
         if st.button("🔄 Refresh Status"):
             try:
-                response = requests.get(f"{st.session_state.backend_url}/instrument/status", timeout=10)
+                response = requests.get(f"{backend_url}/instrument/status", timeout=10)
                 if response.status_code == 200:
                     status_data = response.json()
 
@@ -141,7 +210,7 @@ with main_tab2:
         st.subheader("Detailed Device Information")
         if st.button("🔄 Refresh Devices"):
             try:
-                response = requests.get(f"{st.session_state.backend_url}/instrument/devices/detailed", timeout=10)
+                response = requests.get(f"{backend_url}/instrument/devices/detailed", timeout=10)
                 if response.status_code == 200:
                     devices_data = response.json()
 
@@ -206,7 +275,7 @@ with main_tab2:
     with plan_tab1:
         if st.button("🔄 Refresh Plans"):
             try:
-                response = requests.get(f"{st.session_state.backend_url}/instrument/plans/detailed", timeout=10)
+                response = requests.get(f"{backend_url}/instrument/plans/detailed", timeout=10)
                 if response.status_code == 200:
                     plans_data = response.json()
 
@@ -328,7 +397,7 @@ with main_tab2:
         if st.button("🔄 Get Recommendations"):
             try:
                 response = requests.get(
-                    f"{st.session_state.backend_url}/instrument/plans/recommendations", timeout=10
+                    f"{backend_url}/instrument/plans/recommendations", timeout=10
                 )
                 if response.status_code == 200:
                     rec_data = response.json()
@@ -398,7 +467,7 @@ with main_tab2:
         st.subheader("Plan Analysis Summary")
         if st.button("🔄 Refresh Analysis"):
             try:
-                response = requests.get(f"{st.session_state.backend_url}/instrument/plans/detailed", timeout=10)
+                response = requests.get(f"{backend_url}/instrument/plans/detailed", timeout=10)
                 if response.status_code == 200:
                     plans_data = response.json()
                     analysis_summary = plans_data.get("analysis_summary", {})
@@ -436,7 +505,7 @@ with main_tab2:
         st.subheader("Scan History")
     if st.button("🔄 Refresh History"):
         try:
-            response = requests.get(f"{st.session_state.backend_url}/instrument/history", timeout=10)
+            response = requests.get(f"{backend_url}/instrument/history", timeout=10)
             if response.status_code == 200:
                 history_data = response.json()
 
@@ -484,116 +553,38 @@ with main_tab2:
         except Exception as e:
             st.error(f"Error fetching history: {str(e)}")
 
-with main_tab3:
-    st.header("⚙️ Connection Configuration")
-    
-    # Connection settings
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        new_model_address = st.text_input(
-            "Model Address", 
-            value=st.session_state.model_address,
-            help="Enter the LLM model URL (LMStudio, Ollama, etc.)"
-        )
-        if new_model_address != st.session_state.model_address:
-            st.session_state.model_address = new_model_address
-    
-    with col2:
-        new_st.session_state.backend_url = st.text_input(
-            "Backend URL", 
-            value=st.session_state.st.session_state.backend_url,
-            help="bAIt-Chat backend API URL"
-        )
-        if new_st.session_state.backend_url != st.session_state.st.session_state.backend_url:
-            st.session_state.st.session_state.backend_url = new_st.session_state.backend_url
-    
-    with col3:
-        new_qserver_url = st.text_input(
-            "QServer Address", 
-            value=st.session_state.qserver_url,
-            help="Bluesky QServer URL"
-        )
-        if new_qserver_url != st.session_state.qserver_url:
-            st.session_state.qserver_url = new_qserver_url
-    
+# Bottom section - Devices and Plans (keep existing for compatibility)
+if st.session_state.devices or st.session_state.plans:
     st.markdown("---")
-    
-    # Connection status
-    st.subheader("📊 Connection Status")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        if st.button("🔄 Test Connections"):
-            # Test backend connection
-            try:
-                health_response = requests.get(f"{st.session_state.st.session_state.backend_url}/health", timeout=5)
-                if health_response.status_code == 200:
-                    st.success("✅ Backend connected")
-                else:
-                    st.error("❌ Backend not responding")
-            except Exception as e:
-                st.error(f"❌ Backend failed: {str(e)}")
-            
-            # Test QServer connection
-            try:
-                qserver_status_response = requests.get(f"{st.session_state.st.session_state.backend_url}/qserver/status", timeout=5)
-                if qserver_status_response.status_code == 200:
-                    status_data = qserver_status_response.json()
-                    st.success(f"✅ QServer: {status_data['manager_state']}")
-                else:
-                    st.error("❌ QServer not available")
-            except Exception as e:
-                st.warning(f"⚠️ QServer status unknown: {str(e)}")
-    
+        st.header("🔧 Available Devices")
+        if st.session_state.devices:
+            for category, devices in st.session_state.devices.items():
+                if devices:  # Only show categories that have devices
+                    st.subheader(f"{category.title()}")
+                    for name, info in devices.items():
+                        description = info.get("description", "No description available")
+                        st.write(f"**{name}**: {description}")
+        else:
+            st.info("Connect to QServer to load devices")
+
     with col2:
-        if st.button("📥 Load Devices and Plans"):
-            with st.spinner("Loading..."):
-                # Fetch devices from QServer via backend
-                try:
-                    devices_response = requests.get(f"{st.session_state.st.session_state.backend_url}/devices", timeout=10)
-                    if devices_response.status_code == 200:
-                        st.session_state.devices = devices_response.json().get("devices", {})
-                        device_count = sum(
-                            len(category) for category in st.session_state.devices.values()
-                        )
-                        st.success(f"✅ Loaded {device_count} devices")
-                    else:
-                        st.warning("⚠️ Could not load devices")
-                        st.session_state.devices = {}
-                except Exception as e:
-                    st.warning(f"⚠️ Devices failed: {str(e)}")
-                    st.session_state.devices = {}
-                
-                # Fetch plans from QServer via backend
-                try:
-                    plans_response = requests.get(f"{st.session_state.st.session_state.backend_url}/plans", timeout=10)
-                    if plans_response.status_code == 200:
-                        plans_data = plans_response.json()
-                        st.session_state.plans = plans_data.get("plans", {})
-                        st.success(f"✅ Loaded {len(st.session_state.plans)} plans")
-                    else:
-                        st.warning("⚠️ Could not load plans")
-                except Exception as e:
-                    st.warning(f"⚠️ Plans failed: {str(e)}")
-    
-    # Current status summary
-    if st.session_state.devices or st.session_state.plans:
-        st.markdown("---")
-        st.subheader("📈 Current Status")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            device_count = sum(len(category) for category in st.session_state.devices.values()) if st.session_state.devices else 0
-            st.metric("Devices Loaded", device_count)
-        
-        with col2:
-            plan_count = len(st.session_state.plans) if st.session_state.plans else 0
-            st.metric("Plans Loaded", plan_count)
-        
-        with col3:
-            st.metric("Status", "✅ Ready" if device_count > 0 or plan_count > 0 else "⚠️ Not Connected")
+        st.header("📋 Available Plans")
+        if st.session_state.plans:
+            for plan_name, plan_info in st.session_state.plans.items():
+                description = plan_info.get("description", "Scan plan")
+                st.write(f"**{plan_name}**: {description}")
+        else:
+            st.info("Connect to QServer to load plans")
+
+# Footer
+st.markdown("---")
+st.caption(
+    "💡 **Tips:** Ask about specific devices, explain scan plans, or get help with beamline operations. Connect to QServer to load your beamline configuration."
+)
 
 
 def main():
