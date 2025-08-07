@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # Redis for QServer
+  redis:
+    image: redis:7-alpine
+    container_name: bait-chat-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - bait-chat
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # QServer with test instrument
+  qserver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.qserver
+    container_name: bait-chat-qserver
+    ports:
+      - "60610:60610"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - STARTUP_MODULE=bait_chat.test_instrument.startup
+    volumes:
+      - ./bait_chat/test_instrument:/app/test_instrument:ro
+      - qserver_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - bait-chat
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60610/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: bait-chat-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - QSERVER_URL=http://qserver:60610
+      - LMSTUDIO_URL=http://host.docker.internal:1234
+      - DEBUG=false
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      qserver:
+        condition: service_healthy
+    networks:
+      - bait-chat
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend (Streamlit)
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: bait-chat-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - bait-chat
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+    driver: local
+  qserver_data:
+    driver: local
+
+networks:
+  bait-chat:
+    driver: bridge
+    name: bait-chat-network

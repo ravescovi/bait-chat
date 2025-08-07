@@ -1,0 +1,43 @@
+# Include documentation
+include README.md
+include DEMO_README.md
+include CHANGELOG.md
+include LICENSE
+
+# Include configuration files
+include pyproject.toml
+include compose.yml
+
+# Include test instrument files
+recursive-include bait_chat/test_instrument *.py
+recursive-include bait_chat/test_instrument *.yml
+recursive-include bait_chat/test_instrument *.yaml
+recursive-include bait_chat/test_instrument *.sh
+recursive-include bait_chat/test_instrument *.md
+
+# Include frontend assets
+recursive-include bait_chat/frontend *.py
+recursive-include bait_chat/frontend/static *
+
+# Include backend templates
+recursive-include bait_chat/backend *.py
+recursive-include bait_chat/backend/templates *
+
+# Include tests
+recursive-include bait_chat/tests *.py
+
+# Include vector_db
+recursive-include bait_chat/vector_db *
+
+# Include scripts
+recursive-include scripts *.sh
+recursive-include scripts *.md
+
+# Include Docker files
+recursive-include docker *
+
+# Exclude development files
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .git*
+global-exclude .DS_Store

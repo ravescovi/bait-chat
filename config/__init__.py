@@ -1,1 +1,0 @@
-# bAIt-Chat Configuration Package
