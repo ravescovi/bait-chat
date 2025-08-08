@@ -46,6 +46,9 @@ app.add_middleware(
 
 # Configuration from settings
 QSERVER_URL = os.environ.get("QSERVER_URL", settings.qserver_url)
+# LMStudio uses OpenAI-compatible API at localhost:1234/v1
+LMSTUDIO_BASE_URL = os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+# For backward compatibility
 LMSTUDIO_URL = os.environ.get("LMSTUDIO_URL", settings.lmstudio_url)
 
 
@@ -65,10 +68,12 @@ async def health():
             qserver_status = "connected"
     except:
         pass
+    
+    llm_provider = os.environ.get("LLM_PROVIDER", "lmstudio")
 
     return {
         "status": "healthy",
-        "llm_provider": "lmstudio",
+        "llm_provider": llm_provider,
         "qserver_status": qserver_status,
         "qserver_url": QSERVER_URL,
     }
@@ -378,11 +383,48 @@ Available plans: {', '.join(plan_list[:10]) if plan_list else 'Loading...'}"""
         except:
             context = "Real-time device and plan information not available"
 
-        # Connect to LLM
-        connector = aiohttp.TCPConnector(ssl=False)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            # Create context-aware system message
-            system_context = f"""You are bAIt-Chat, an AI assistant for Bluesky beamline control at synchrotron facilities.
+        # Check LLM provider
+        llm_provider = os.environ.get("LLM_PROVIDER", "lmstudio").lower()
+        
+        if llm_provider == "mock":
+            # Mock LLM response for testing
+            mock_response = f"""I'm bAIt-Chat, your beamline control assistant. I understand you said: "{message}"
+
+I can help you with:
+- Running scan plans (like count, scan, grid_scan)
+- Controlling beamline devices
+- Explaining scan parameters
+- Monitoring the queue
+
+{context}
+
+What would you like to do with the beamline today?"""
+            
+            return {
+                "message": message,
+                "response": mock_response,
+                "model_url": "mock"
+            }
+        else:
+            # Connect to LMStudio or other LLM
+            # For LMStudio, use the OpenAI-compatible endpoint
+            if llm_provider == "lmstudio":
+                # LMStudio uses OpenAI-compatible API
+                api_url = f"{LMSTUDIO_BASE_URL}/chat/completions"
+                # LMStudio doesn't require a real API key, but we need to provide something
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer lm-studio"  # Any string works
+                }
+            else:
+                # Use provided model_url for other providers
+                api_url = f"{model_url}/v1/chat/completions"
+                headers = {"Content-Type": "application/json"}
+            
+            connector = aiohttp.TCPConnector(ssl=False)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                # Create context-aware system message
+                system_context = f"""You are bAIt-Chat, an AI assistant for Bluesky beamline control at synchrotron facilities.
 
 {context}
 
@@ -390,35 +432,45 @@ You are connected to a real QServer running a test instrument with BITS (Beamlin
 
 Help users understand scan plans, suggest appropriate parameters based on available devices, explain beamline operations, and provide guidance on data collection strategies. Be specific about the actual devices available when possible."""
 
-            messages = [
-                {"role": "system", "content": system_context},
-                {"role": "user", "content": message},
-            ]
+                messages = [
+                    {"role": "system", "content": system_context},
+                    {"role": "user", "content": message},
+                ]
 
-            payload = {
-                "model": "gpt-3.5-turbo",
-                "messages": messages,
-                "max_tokens": 500,
-                "temperature": 0.7,
-            }
+                # For LMStudio, we don't specify a model in the payload as it uses the loaded model
+                payload = {
+                    "messages": messages,
+                    "max_tokens": 500,
+                    "temperature": 0.7,
+                }
+                
+                # Only add model field if not using LMStudio
+                if llm_provider != "lmstudio":
+                    payload["model"] = "gpt-3.5-turbo"
 
-            async with session.post(
-                f"{model_url}/v1/chat/completions",
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=30
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    chat_response = result["choices"][0]["message"]["content"]
-                    return {
-                        "message": message,
-                        "response": chat_response,
-                        "model_url": model_url
-                    }
-                else:
-                    error_text = await response.text()
-                    raise HTTPException(status_code=500, detail=f"LLM API error: {response.status} - {error_text}")
+                async with session.post(
+                    api_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=30
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        chat_response = result["choices"][0]["message"]["content"]
+                        return {
+                            "message": message,
+                            "response": chat_response,
+                            "model_url": api_url if llm_provider == "lmstudio" else model_url
+                        }
+                    else:
+                        error_text = await response.text()
+                        # If LMStudio is not running, provide helpful error
+                        if llm_provider == "lmstudio" and "Connection refused" in str(error_text):
+                            raise HTTPException(
+                                status_code=503, 
+                                detail="LMStudio is not running. Please start LMStudio and load a model, then ensure the local server is started on port 1234."
+                            )
+                        raise HTTPException(status_code=500, detail=f"LLM API error: {response.status} - {error_text}")
 
     except HTTPException:
         raise

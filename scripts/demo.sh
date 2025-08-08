@@ -3,6 +3,21 @@
 
 set -e
 
+# Activate conda environment 'bits'
+if command -v conda >/dev/null 2>&1; then
+    echo "🐍 Activating conda environment 'bits'..."
+    eval "$(conda shell.bash hook)"
+    conda activate bits || {
+        echo "❌ Failed to activate conda environment 'bits'"
+        echo "   Please ensure the 'bits' environment exists"
+        echo "   Create it with: conda create -n bits python=3.10"
+        exit 1
+    }
+    echo "  ✅ Conda environment 'bits' activated"
+else
+    echo "⚠️  Conda not found, using system Python"
+fi
+
 echo "🔬 bAIt-Chat Full Demo Startup"
 echo "============================="
 
@@ -47,6 +62,43 @@ cleanup() {
 trap cleanup EXIT
 trap cleanup INT
 trap cleanup TERM
+
+# Check and install dependencies if needed
+echo "📦 Checking Python dependencies..."
+missing_deps=()
+
+if ! python -c "import redis" 2>/dev/null; then
+    missing_deps+=("redis")
+fi
+
+if ! python -c "import bluesky_queueserver" 2>/dev/null; then
+    missing_deps+=("bluesky-queueserver")
+fi
+
+if ! python -c "import apsbits" 2>/dev/null; then
+    missing_deps+=("apsbits")
+fi
+
+if ! python -c "import fastapi" 2>/dev/null; then
+    missing_deps+=("fastapi")
+fi
+
+if ! python -c "import uvicorn" 2>/dev/null; then
+    missing_deps+=("uvicorn[standard]")
+fi
+
+if ! python -c "import streamlit" 2>/dev/null; then
+    missing_deps+=("streamlit")
+fi
+
+if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    echo "  📥 Installing missing dependencies: ${missing_deps[*]}"
+    pip install ${missing_deps[*]} || {
+        echo "  ⚠️  Some dependencies failed to install, continuing anyway..."
+    }
+else
+    echo "  ✅ All Python dependencies installed"
+fi
 
 # Start Redis if needed
 echo "🔍 Checking Redis..."
