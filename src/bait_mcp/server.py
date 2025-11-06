@@ -17,12 +17,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .llm import LLMProviderError, create_llm_provider
 from .models import DeviceResponse, ExplainRequest, ExplainResponse, PlanResponse, QServerStatus
+
 
 class ChatRequest:
     def __init__(self, message: str, model_url: str = None):
         self.message = message
         self.model_url = model_url
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -68,7 +71,7 @@ async def health():
             qserver_status = "connected"
     except:
         pass
-    
+
     llm_provider = os.environ.get("LLM_PROVIDER", "lmstudio")
 
     return {
@@ -356,8 +359,8 @@ async def chat_with_llm(request: dict):
     """Direct chat with LLM using provided model URL"""
     try:
         message = request.get("message", "")
-        model_url = request.get("model_url", LMSTUDIO_URL)
-        
+        raw_model_url = request.get("model_url")
+
         if not message:
             raise HTTPException(status_code=400, detail="Message is required")
 
@@ -380,12 +383,27 @@ async def chat_with_llm(request: dict):
             context = f"""Available devices: {', '.join(device_list[:10]) if device_list else 'Loading...'}
 Available plans: {', '.join(plan_list[:10]) if plan_list else 'Loading...'}"""
 
-        except:
+        except Exception:
             context = "Real-time device and plan information not available"
 
         # Check LLM provider
         llm_provider = os.environ.get("LLM_PROVIDER", "lmstudio").lower()
-        
+
+        if isinstance(raw_model_url, str):
+            model_url = raw_model_url.strip() or None
+        else:
+            model_url = None
+
+        if model_url and llm_provider in {"openai", "agentkit"}:
+            default_targets = {
+                settings.lmstudio_url.rstrip("/"),
+                os.environ.get("LMSTUDIO_URL", settings.lmstudio_url).rstrip("/"),
+                "http://localhost:1234",
+                "http://127.0.0.1:1234",
+            }
+            if model_url.rstrip("/") in default_targets:
+                model_url = None
+
         if llm_provider == "mock":
             # Mock LLM response for testing
             mock_response = f"""I'm bAIt-Chat, your beamline control assistant. I understand you said: "{message}"
@@ -399,32 +417,10 @@ I can help you with:
 {context}
 
 What would you like to do with the beamline today?"""
-            
-            return {
-                "message": message,
-                "response": mock_response,
-                "model_url": "mock"
-            }
-        else:
-            # Connect to LMStudio or other LLM
-            # For LMStudio, use the OpenAI-compatible endpoint
-            if llm_provider == "lmstudio":
-                # LMStudio uses OpenAI-compatible API
-                api_url = f"{LMSTUDIO_BASE_URL}/chat/completions"
-                # LMStudio doesn't require a real API key, but we need to provide something
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer lm-studio"  # Any string works
-                }
-            else:
-                # Use provided model_url for other providers
-                api_url = f"{model_url}/v1/chat/completions"
-                headers = {"Content-Type": "application/json"}
-            
-            connector = aiohttp.TCPConnector(ssl=False)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                # Create context-aware system message
-                system_context = f"""You are bAIt-Chat, an AI assistant for Bluesky beamline control at synchrotron facilities.
+
+            return {"message": message, "response": mock_response, "model_url": "mock"}
+
+        system_context = f"""You are bAIt-Chat, an AI assistant for Bluesky beamline control at synchrotron facilities.
 
 {context}
 
@@ -432,53 +428,46 @@ You are connected to a real QServer running a test instrument with BITS (Beamlin
 
 Help users understand scan plans, suggest appropriate parameters based on available devices, explain beamline operations, and provide guidance on data collection strategies. Be specific about the actual devices available when possible."""
 
-                messages = [
-                    {"role": "system", "content": system_context},
-                    {"role": "user", "content": message},
-                ]
+        messages = [
+            {"role": "system", "content": system_context},
+            {"role": "user", "content": message},
+        ]
 
-                # For LMStudio, we don't specify a model in the payload as it uses the loaded model
-                payload = {
-                    "messages": messages,
-                    "max_tokens": 500,
-                    "temperature": 0.7,
-                }
-                
-                # Only add model field if not using LMStudio
-                if llm_provider != "lmstudio":
-                    payload["model"] = "gpt-3.5-turbo"
+        temperature_setting = os.environ.get("LLM_TEMPERATURE")
+        max_tokens_setting = os.environ.get("LLM_MAX_TOKENS")
+        try:
+            temperature_value = float(temperature_setting) if temperature_setting else 0.7
+        except ValueError:
+            temperature_value = 0.7
+        try:
+            max_tokens_value = int(max_tokens_setting) if max_tokens_setting else 500
+        except ValueError:
+            max_tokens_value = 500
 
-                async with session.post(
-                    api_url,
-                    json=payload,
-                    headers=headers,
-                    timeout=30
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        chat_response = result["choices"][0]["message"]["content"]
-                        return {
-                            "message": message,
-                            "response": chat_response,
-                            "model_url": api_url if llm_provider == "lmstudio" else model_url
-                        }
-                    else:
-                        error_text = await response.text()
-                        # If LMStudio is not running, provide helpful error
-                        if llm_provider == "lmstudio" and "Connection refused" in str(error_text):
-                            raise HTTPException(
-                                status_code=503, 
-                                detail="LMStudio is not running. Please start LMStudio and load a model, then ensure the local server is started on port 1234."
-                            )
-                        raise HTTPException(status_code=500, detail=f"LLM API error: {response.status} - {error_text}")
+        try:
+            provider = create_llm_provider(llm_provider, model_url=model_url)
+        except LLMProviderError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        try:
+            chat_response = await provider.chat(
+                messages,
+                temperature=temperature_value,
+                max_tokens=max_tokens_value,
+            )
+        except LLMProviderError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        return {
+            "message": message,
+            "response": chat_response,
+            "model_url": provider.identifier or model_url or llm_provider,
+        }
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
-
-
-# Enhanced Instrument Introspection Endpoints
 
 
 @app.get("/instrument/status")
@@ -919,8 +908,6 @@ def _get_parameter_validation_rules(param_name: str) -> dict:
         rules = {"type": "list", "min_length": 1}
 
     return rules
-
-
 
 
 def _estimate_plan_duration(plan_name: str, parameters: list) -> str:
