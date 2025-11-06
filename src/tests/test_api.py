@@ -9,7 +9,7 @@ import sys
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 # Import from the backend package
 from bait_mcp.server import app
@@ -151,7 +151,8 @@ class TestAsyncEndpoints:
 
     async def test_concurrent_requests(self):
         """Test handling of concurrent requests"""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
             # Send multiple concurrent requests
             tasks = [ac.get("/health"), ac.get("/devices"), ac.get("/plans")]
 
